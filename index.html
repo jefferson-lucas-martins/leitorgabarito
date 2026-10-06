@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scanner com Câmera Ao Vivo - EEMTI Agostinho Neres Portela</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script async src="https://docs.opencv.org/4.x/opencv.js" onload="console.log('OpenCV pronto.');"></script>
+    <style>
+        :root {
+            --primary: #15803d;
+            --primary-hover: #166534;
+            --bg-color: #0f172a;
+            --card-bg: #ffffff;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --border: #cbd5e1;
+            --danger: #ef4444;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+
+        .card {
+            background: var(--card-bg);
+            width: 100%;
+            max-width: 580px;
+            padding: 20px;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+            box-sizing: border-box;
+        }
+
+        .header-logo { text-align: center; margin-bottom: 15px; }
+        .header-logo h1 { font-size: 15px; font-weight: 700; color: var(--text-main); margin: 6px 0 0 0; text-transform: uppercase; }
+        .header-logo p { font-size: 11px; color: var(--text-muted); margin: 3px 0 0 0; }
+
+        .step-container { margin-bottom: 14px; }
+        label { font-size: 13px; font-weight: 600; display: block; margin-bottom: 5px; color: var(--text-main); }
+        
+        select {
+            width: 100%; padding: 11px; font-size: 14px; font-family: 'Inter', sans-serif;
+            border: 1px solid var(--border); border-radius: 10px; background-color: #fff; outline: none; box-sizing: border-box;
+        }
+        select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(21, 128, 61, 0.15); }
+        select:disabled { background-color: #f8fafc; color: var(--text-muted); cursor: not-allowed; }
+
+        /* TELA DE CÂMERA AO VIVO COM A MOLDURA DELINEADA */
+        #containerCameraAoVivo {
+            display: none;
+            position: relative;
+            background: #000;
+            border-radius: 14px;
+            overflow: hidden;
+            margin-top: 10px;
+            text-align: center;
+        }
+        #videoCamera {
+            width: 100%;
+            max-height: 480px;
+            object-fit: cover;
+            display: block;
+        }
+        /* Moldura delimitadora sobre o vídeo com referência em Q1 e Q26 */
+        .moldura-guia {
+            position: absolute;
+            top: 10%; left: 10%; right: 10%; bottom: 10%;
+            border: 3px dashed #22c55e;
+            border-radius: 12px;
+            pointer-events: none;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.4); /* Escurece o fora da área */
+        }
+        .tag-ponta {
+            background: rgba(21, 128, 61, 0.95);
+            color: white;
+            font-size: 11px;
+            font-weight: bold;
+            padding: 5px 12px;
+            border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .button-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 5px; }
+        .btn-action {
+            padding: 14px; font-size: 15px; font-weight: 600; font-family: 'Inter', sans-serif;
+            border: none; border-radius: 10px; cursor: pointer; display: flex; align-items: center;
+            justify-content: center; gap: 8px; color: white; box-sizing: border-box; text-decoration: none;
+        }
+        .btn-camera { background-color: var(--primary); width: 100%; }
+        .btn-camera:hover { background-color: var(--primary-hover); }
+        .btn-manage { background-color: #475569; width: 100%; margin-top: 10px; }
+        .btn-manage:hover { background-color: #334155; }
+
+        #status {
+            margin-top: 15px; padding: 10px; border-radius: 10px; font-size: 13px; font-weight: 500; text-align: center;
+            background-color: #f8fafc; border: 1px solid var(--border); color: var(--text-muted);
+        }
+        
+        canvas { display: none; }
+
+        /* PAINEL DE CONFERÊNCIA DAS 26 QUESTÕES */
+        #painelConferencia {
+            display: none; background: #f8fafc; border: 2px solid var(--primary); border-radius: 12px; padding: 15px; margin-top: 15px; text-align: left;
+        }
+        .tabela-respostas {
+            max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; background: white; padding: 10px; margin-top: 8px;
+        }
+        .linha-questao {
+            display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #f1f5f9; font-size: 13px;
+        }
+        .linha-questao select { width: 75px; padding: 4px; font-size: 13px; text-align: center; border-radius: 6px; }
+
+        #modalGestao {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); justify-content: center; align-items: center; padding: 15px; box-sizing: border-box; z-index: 1000;
+        }
+        .modal-content { background: white; padding: 20px; border-radius: 16px; width: 100%; max-width: 480px; max-height: 85vh; overflow-y: auto; }
+        .envio-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; gap: 10px; }
+        .btn-delete { background: var(--danger); color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-weight: 600; white-space: nowrap; }
+        .btn-delete:hover { background: var(--danger-hover); }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <div class="header-logo">
+        <svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2" style="margin-bottom: 2px;">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path>
+        </svg>
+        <h1>EEMTI Agostinho Neres Portela</h1>
+        <p>Scanner com Visor Delimitado (Q1 a Q26)</p>
+    </div>
+    
+    <div class="step-container">
+        <label for="selectDisciplina">1. Disciplina</label>
+        <select id="selectDisciplina" onchange="verificarLiberacao()">
+            <option value="">-- Selecione a Disciplina --</option>
+            <option value="Matemática">Matemática</option>
+            <option value="Português">Português</option>
+        </select>
+    </div>
+
+    <div class="step-container">
+        <label for="selectSerie">2. Série / Turma</label>
+        <select id="selectSerie" onchange="filtrarAlunos()" disabled>
+            <option value="">Selecione a disciplina primeiro...</option>
+        </select>
+    </div>
+
+    <div class="step-container">
+        <label for="selectAluno">3. Aluno(a)</label>
+        <select id="selectAluno" disabled>
+            <option value="">Selecione a série primeiro...</option>
+        </select>
+    </div>
+
+    <div class="step-container">
+        <label>4. Escanear Gabarito na Câmera</label>
+        
+        <button class="btn-action btn-camera" id="btnAbrirCam" onclick="iniciarCameraAoVivo()" style="opacity: 0.4; pointer-events: none;">📷 Abrir Câmera com Moldura</button>
+
+        <!-- VÍDEO DA CÂMERA COM A ÁREA DELINEADA -->
+        <div id="containerCameraAoVivo">
+            <video id="videoCamera" autoplay playsinline></video>
+            <div class="moldura-guia">
+                <div class="tag-ponta">⬆️ Q1 (Superior Esquerdo)</div>
+                <div style="font-size: 10px; color: #86efac; background: rgba(0,0,0,0.7); padding: 3px 8px; border-radius: 4px;">Enquadre a grade de bolhas aqui dentro</div>
+                <div class="tag-ponta">⬇️ Q26 (Inferior Direito)</div>
+            </div>
+            <button class="btn-action btn-camera" style="margin: 10px auto; width: calc(100% - 20px); background-color: #22c55e;" onclick="capturarFotoDoVideo()">📸 Capturar e Analisar</button>
+        </div>
+    </div>
+
+    <!-- PAINEL DE CONFERÊNCIA DAS 26 QUESTÕES -->
+    <div id="painelConferencia">
+        <h4 style="margin:0 0 5px 0; color:var(--primary); font-size:14px;">🔍 Confira a Leitura das 26 Questões:</h4>
+        <p style="font-size: 11px; color: var(--text-muted); margin-top:0;">O sistema leu os itens abaixo. Ajuste caso necessário antes de enviar:</p>
+        <div id="listaRespostasEditaveis" class="tabela-respostas"></div>
+        <div style="margin-top: 12px; display: flex; gap: 8px;">
+            <button class="btn-action btn-camera" style="flex:1; padding:10px; margin:0;" onclick="salvarAjustesEEnviar()">✅ Salvar e Enviar</button>
+            <button class="btn-action btn-delete" style="flex:1; padding:10px;" onclick="cancelarEnvio()">❌ Tirar Nova Foto</button>
+        </div>
+    </div>
+
+    <button class="btn-action btn-manage" onclick="abrirGestao()">📋 Gerenciar / Excluir Envios</button>
+
+    <div id="status">Aguardando seleções...</div>
+    <canvas id="canvasProcessamento"></canvas>
+</div>
+
+<div id="modalGestao">
+    <div class="modal-content">
+        <h3 style="margin-top:0; font-size:18px;">Provas Já Enviadas</h3>
+        <p style="font-size: 13px; color: var(--text-muted);">Caso precise reenviar, exclua o registro abaixo:</p>
+        <div id="listaEnvios">Carregando...</div>
+        <button class="btn-action btn-manage" style="margin-top: 15px;" onclick="fecharGestao()">Fechar</button>
+    </div>
+</div>
+
+    <script>
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzoJgP4HgHv3e1NGYI5pfLgUBPiTaKnNY18b8Ba5Lc47orQiDcjrGETpgxn7jyn7Iw7/exec"; 
+        
+        const GABARITO_OFICIAL = [
+            "D", "C", "C", "A", "A", "D", "A", "D", "C", "B", "D", "C", "B", 
+            "D", "B", "C", "D", "D", "A", "A", "B", "B", "B", "E", "C", "B"
+        ];
+
+        let dadosGlobais = {};
+        let mediaStream = null;
+
+        function verificarLiberacao() {
+            const disc = document.getElementById('selectDisciplina').value;
+            const selectSerie = document.getElementById('selectSerie');
+            
+            if (!disc) {
+                selectSerie.disabled = true;
+                selectSerie.innerHTML = '<option value="">Selecione a disciplina primeiro...</option>';
+                bloquearBotoesFoto(true);
+                return;
+            }
+
+            if (Object.keys(dadosGlobais).length === 0) {
+                fetch(GOOGLE_SCRIPT_URL + "?action=buscarDados")
+                    .then(res => res.json())
+                    .then(data => {
+                        if(data.erro) { alert(data.erro); return; }
+                        dadosGlobais = data;
+                        preencherSeries();
+                    });
+            } else {
+                preencherSeries();
+            }
+        }
+
+        function preencherSeries() {
+            const selectSerie = document.getElementById('selectSerie');
+            selectSerie.innerHTML = '<option value="">-- Selecione a Série --</option>';
+            Object.keys(dadosGlobais).forEach(serie => {
+                let opt = document.createElement('option');
+                opt.value = serie; opt.textContent = serie;
+                selectSerie.appendChild(opt);
+            });
+            selectSerie.disabled = false;
+        }
+
+        function filtrarAlunos() {
+            const serie = document.getElementById('selectSerie').value;
+            const selectAluno = document.getElementById('selectAluno');
+            selectAluno.innerHTML = '<option value="">-- Selecione o Aluno --</option>';
+            
+            if (!serie) {
+                selectAluno.disabled = true;
+                bloquearBotoesFoto(true);
+                return;
+            }
+
+            (dadosGlobais[serie] || []).forEach(aluno => {
+                let opt = document.createElement('option');
+                opt.value = aluno; opt.textContent = aluno;
+                selectAluno.appendChild(opt);
+            });
+            selectAluno.disabled = false;
+            selectAluno.onchange = checarAlunoPronto;
+        }
+
+        function checarAlunoPronto() {
+            const aluno = document.getElementById('selectAluno').value;
+            if (aluno) {
+                bloquearBotoesFoto(false);
+                document.getElementById('status').innerText = "Tudo pronto! Clique em 'Abrir Câmera com Moldura'.";
+            } else {
+                bloquearBotoesFoto(true);
+            }
+        }
+
+        function bloquearBotoesFoto(bloquear) {
+            const op = bloquear ? "0.4" : "1";
+            const pe = bloquear ? "none" : "auto";
+            document.getElementById('btnAbrirCam').style.opacity = op;
+            document.getElementById('btnAbrirCam').style.pointerEvents = pe;
+        }
+
+        // LIGAR CÂMERA AO VIVO NA TELA
+        async function iniciarCameraAoVivo() {
+            const container = document.getElementById('containerCameraAoVivo');
+            const video = document.getElementById('videoCamera');
+            container.style.display = "block";
+
+            try {
+                mediaStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: { exact: "environment" } }
+                });
+            } catch (err) {
+                try {
+                    mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                } catch (e) {
+                    alert("Para usar a câmera ao vivo na tela, abra este link hospedado via HTTPS (ex: GitHub Pages ou Netlify).");
+                    container.style.display = "none";
+                    return;
+                }
+            }
+            video.srcObject = mediaStream;
+        }
+
+        // CAPTURAR FOTO DO VÍDEO
+        function capturarFotoDoVideo() {
+            const video = document.getElementById('videoCamera');
+            const canvas = document.getElementById('canvasProcessamento');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+            }
+            document.getElementById('containerCameraAoVivo').style.display = "none";
+
+            processarCanvasFinal(canvas);
+        }
+
+        async function processarCanvasFinal(canvas) {
+            const disciplina = document.getElementById('selectDisciplina').value;
+            const serie = document.getElementById('selectSerie').value;
+            const aluno = document.getElementById('selectAluno').value;
+            const nomeCompleto = `${aluno} (${serie})`;
+
+            const statusEl = document.getElementById('status');
+            statusEl.innerText = "Verificando histórico do aluno...";
+
+            try {
+                let resposta = await fetch(`${GOOGLE_SCRIPT_URL}?action=verificarEnvio&aluno=${encodeURIComponent(nomeCompleto)}&disciplina=${encodeURIComponent(disciplina)}`);
+                let resultado = await resposta.json();
+
+                if (resultado.enviado) {
+                    alert(`⚠️ Atenção: O aluno(a) ${aluno} já possui prova enviada para ${disciplina}!`);
+                    statusEl.innerText = "Envio bloqueado: Aluno já avaliado.";
+                    return;
+                }
+            } catch (err) {
+                console.error(err);
+            }
+
+            statusEl.innerText = "Analisando marcações dentro da moldura...";
+
+            try {
+                let src = cv.imread(canvas);
+                let gray = new cv.Mat();
+                cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+                
+                let thresh = new cv.Mat();
+                cv.threshold(gray, thresh, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+
+                let respostasLidas = [];
+                let alternativas = ["A", "B", "C", "D", "E"];
+                
+                let alturaTotal = thresh.rows;
+                let larguraTotal = thresh.cols;
+                
+                // Mapeamento preciso ajustado à área delimitada pela moldura
+                let yInicio = alturaTotal * 0.448; 
+                let yFim = alturaTotal * 0.925;    
+                let alturaQuestao = (yFim - yInicio) / 13; 
+
+                for (let col = 0; col < 2; col++) {
+                    for (let q = 0; q < 13; q++) {
+                        let questaoIdx = col * 13 + q;
+                        if (questaoIdx >= 26) break;
+
+                        let melhorAlternativa = "A";
+                        let maxPixels = -1;
+                        let yPos = yInicio + (q * alturaQuestao);
+
+                        for (let a = 0; a < 5; a++) {
+                            let xBase = col === 0 ? larguraTotal * 0.174 : larguraTotal * 0.578;
+                            let espacamentoBolha = larguraTotal * 0.052;
+                            let xPos = xBase + (a * espacamentoBolha);
+
+                            let regiao = thresh.roi(new cv.Rect(xPos - 7, yPos - 7, 14, 14));
+                            let contagemPixels = cv.countNonZero(regiao);
+                            
+                            if (contagemPixels > maxPixels) {
+                                maxPixels = contagemPixels;
+                                melhorAlternativa = alternativas[a];
+                            }
+                            regiao.delete();
+                        }
+                        respostasLidas.push(melhorAlternativa);
+                    }
+                }
+
+                src.delete(); gray.delete(); thresh.delete();
+
+                mostrarPainelConferencia(respostasLidas);
+
+            } catch (e) {
+                console.error(e);
+                statusEl.innerText = "Erro ao processar a imagem. Tente novamente.";
+            }
+        }
+
+        function mostrarPainelConferencia(respostas) {
+            const container = document.getElementById('listaRespostasEditaveis');
+            container.innerHTML = "";
+
+            respostas.forEach((resp, idx) => {
+                let opcoesHtml = "";
+                ["A", "B", "C", "D", "E"].forEach(letra => {
+                    opcoesHtml += `<option value="${letra}" ${letra === resp ? 'selected' : ''}>${letra}</option>`;
+                });
+
+                container.innerHTML += `
+                    <div class="linha-questao">
+                        <span>Questão ${idx + 1}:</span>
+                        <select id="resp_q_${idx}">
+                            ${opcoesHtml}
+                        </select>
+                    </div>
+                `;
+            });
+
+            document.getElementById('painelConferencia').style.display = "block";
+            document.getElementById('status').innerText = "✨ Escaneamento concluído! Confira e confirme abaixo.";
+        }
+
+        function salvarAjustesEEnviar() {
+            let respostasFinais = [];
+            for (let i = 0; i < 26; i++) {
+                respostasFinais.push(document.getElementById(`resp_q_${i}`).value);
+            }
+
+            let acertos = 0;
+            for (let i = 0; i < GABARITO_OFICIAL.length; i++) {
+                if (respostasFinais[i] === GABARITO_OFICIAL[i]) acertos++;
+            }
+            let notaCalculada = (acertos / GABARITO_OFICIAL.length) * 10;
+
+            const disciplina = document.getElementById('selectDisciplina').value;
+            const serie = document.getElementById('selectSerie').value;
+            const aluno = document.getElementById('selectAluno').value;
+
+            let dadosFinais = {
+                disciplina: disciplina,
+                nome: `${aluno} (${serie})`,
+                respostas: respostasFinais,
+                nota: Number(notaCalculada.toFixed(1))
+            };
+
+            document.getElementById('painelConferencia').style.display = "none";
+            document.getElementById('status').innerText = "Enviando dados para o Google Sheets...";
+
+            fetch(GOOGLE_SCRIPT_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(dadosFinais)
+            }).then(() => {
+                document.getElementById('status').innerText = `✅ Sucesso! Nota ${dadosFinais.nota} enviada. Reiniciando...`;
+                setTimeout(reiniciarSistema, 3000);
+            }).catch(error => {
+                document.getElementById('status').innerText = "Erro ao enviar para a planilha.";
+            });
+        }
+
+        function cancelarEnvio() {
+            document.getElementById('painelConferencia').style.display = "none";
+            reiniciarSistema();
+            document.getElementById('status').innerText = "Cancelado. Selecione o aluno novamente.";
+        }
+
+        function reiniciarSistema() {
+            document.getElementById('selectDisciplina').value = "";
+            document.getElementById('selectSerie').innerHTML = '<option value="">Selecione a disciplina primeiro...</option>';
+            document.getElementById('selectSerie').disabled = true;
+            document.getElementById('selectAluno').innerHTML = '<option value="">Selecione a série primeiro...</option>';
+            document.getElementById('selectAluno').disabled = true;
+            document.getElementById('status').innerText = "Aguardando seleções...";
+            bloquearBotoesFoto(true);
+        }
+
+        function abrirGestao() {
+            document.getElementById('modalGestao').style.display = "flex";
+            const listaDiv = document.getElementById('listaEnvios');
+            listaDiv.innerHTML = "Buscando envios...";
+
+            fetch(GOOGLE_SCRIPT_URL + "?action=listarEnviados")
+                .then(res => res.json())
+                .then(data => {
+                    if (data.length === 0) {
+                        listaDiv.innerHTML = "<p>Nenhum gabarito enviado ainda.</p>";
+                        return;
+                    }
+                    let html = "";
+                    data.forEach(item => {
+                        html += `<div class="envio-item">
+                            <span><b>${item.aluno}</b><br><small>${item.disciplina} • Nota: ${item.nota}</small></span>
+                            <button class="btn-delete" onclick="excluirEnvio(${item.linha})">Excluir</button>
+                        </div>`;
+                    });
+                    listaDiv.innerHTML = html;
+                });
+        }
+
+        function fecharGestao() {
+            document.getElementById('modalGestao').style.display = "none";
+        }
+
+        function excluirEnvio(linha) {
+            if (confirm("Deseja realmente excluir este envio para permitir novo lançamento?")) {
+                fetch(`${GOOGLE_SCRIPT_URL}?action=excluirEnvio&linha=${linha}`)
+                    .then(res => res.json())
+                    .then(res => {
+                        if (res.status === "sucesso") {
+                            alert("Registro excluído com sucesso!");
+                            abrirGestao();
+                        } else {
+                            alert("Erro ao excluir.");
+                        }
+                    });
+            }
+        }
+    </script>
+</body>
+</html>
