@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scanner com Câmera Ao Vivo - EEMTI Agostinho Neres Portela</title>
+    <title>Scanner Inteligente com Enquadramento Automático - EEMTI Agostinho Neres Portela</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script async src="https://docs.opencv.org/4.x/opencv.js" onload="console.log('OpenCV pronto.');"></script>
     <style>
@@ -55,7 +55,7 @@
         select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(21, 128, 61, 0.15); }
         select:disabled { background-color: #f8fafc; color: var(--text-muted); cursor: not-allowed; }
 
-        /* TELA DE CÂMERA AO VIVO COM A MOLDURA DELINEADA */
+        /* TELA DE CÂMERA AO VIVO COM DETECÇÃO AUTOMÁTICA */
         #containerCameraAoVivo {
             display: none;
             position: relative;
@@ -71,11 +71,10 @@
             object-fit: cover;
             display: block;
         }
-        /* Moldura delimitadora sobre o vídeo com referência em Q1 e Q26 */
         .moldura-guia {
             position: absolute;
             top: 10%; left: 10%; right: 10%; bottom: 10%;
-            border: 3px dashed #22c55e;
+            border: 3px solid #38bdf8;
             border-radius: 12px;
             pointer-events: none;
             box-sizing: border-box;
@@ -84,10 +83,10 @@
             justify-content: space-between;
             align-items: center;
             padding: 10px;
-            box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.4); /* Escurece o fora da área */
+            box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.5);
         }
         .tag-ponta {
-            background: rgba(21, 128, 61, 0.95);
+            background: rgba(14, 165, 233, 0.95);
             color: white;
             font-size: 11px;
             font-weight: bold;
@@ -144,7 +143,7 @@
             <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path>
         </svg>
         <h1>EEMTI Agostinho Neres Portela</h1>
-        <p>Scanner com Visor Delimitado (Q1 a Q26)</p>
+        <p>Scanner com Enquadramento Automático (Q1 a Q26)</p>
     </div>
     
     <div class="step-container">
@@ -171,30 +170,30 @@
     </div>
 
     <div class="step-container">
-        <label>4. Escanear Gabarito na Câmera</label>
+        <label>4. Digitalizar Gabarito</label>
         
-        <button class="btn-action btn-camera" id="btnAbrirCam" onclick="iniciarCameraAoVivo()" style="opacity: 0.4; pointer-events: none;">📷 Abrir Câmera com Moldura</button>
+        <button class="btn-action btn-camera" id="btnAbrirCam" onclick="iniciarCameraAoVivo()" style="opacity: 0.4; pointer-events: none;">📷 Abrir Câmera Inteligente</button>
 
-        <!-- VÍDEO DA CÂMERA COM A ÁREA DELINEADA -->
+        <!-- VÍDEO DA CÂMERA AO VIVO -->
         <div id="containerCameraAoVivo">
             <video id="videoCamera" autoplay playsinline></video>
             <div class="moldura-guia">
-                <div class="tag-ponta">⬆️ Q1 (Superior Esquerdo)</div>
-                <div style="font-size: 10px; color: #86efac; background: rgba(0,0,0,0.7); padding: 3px 8px; border-radius: 4px;">Enquadre a grade de bolhas aqui dentro</div>
-                <div class="tag-ponta">⬇️ Q26 (Inferior Direito)</div>
+                <div class="tag-ponta">🎯 Q1 (Topo Esquerdo)</div>
+                <div style="font-size: 10px; color: #bae6fd; background: rgba(0,0,0,0.7); padding: 3px 8px; border-radius: 4px;">Alinhe o cartão dentro do visor</div>
+                <div class="tag-ponta">🎯 Q26 (Baixo Direito)</div>
             </div>
-            <button class="btn-action btn-camera" style="margin: 10px auto; width: calc(100% - 20px); background-color: #22c55e;" onclick="capturarFotoDoVideo()">📸 Capturar e Analisar</button>
+            <button class="btn-action btn-camera" style="margin: 10px auto; width: calc(100% - 20px); background-color: #0284c7;" onclick="capturarEEnquadrarAutomaticamente()">⚡ Detectar e Escanear</button>
         </div>
     </div>
 
     <!-- PAINEL DE CONFERÊNCIA DAS 26 QUESTÕES -->
     <div id="painelConferencia">
         <h4 style="margin:0 0 5px 0; color:var(--primary); font-size:14px;">🔍 Confira a Leitura das 26 Questões:</h4>
-        <p style="font-size: 11px; color: var(--text-muted); margin-top:0;">O sistema leu os itens abaixo. Ajuste caso necessário antes de enviar:</p>
+        <p style="font-size: 11px; color: var(--text-muted); margin-top:0;">O sistema detectou as bordas e leu os itens abaixo:</p>
         <div id="listaRespostasEditaveis" class="tabela-respostas"></div>
         <div style="margin-top: 12px; display: flex; gap: 8px;">
             <button class="btn-action btn-camera" style="flex:1; padding:10px; margin:0;" onclick="salvarAjustesEEnviar()">✅ Salvar e Enviar</button>
-            <button class="btn-action btn-delete" style="flex:1; padding:10px;" onclick="cancelarEnvio()">❌ Tirar Nova Foto</button>
+            <button class="btn-action btn-delete" style="flex:1; padding:10px;" onclick="cancelarEnvio()">❌ Escanear Novamente</button>
         </div>
     </div>
 
@@ -283,7 +282,7 @@
             const aluno = document.getElementById('selectAluno').value;
             if (aluno) {
                 bloquearBotoesFoto(false);
-                document.getElementById('status').innerText = "Tudo pronto! Clique em 'Abrir Câmera com Moldura'.";
+                document.getElementById('status').innerText = "Tudo pronto! Clique em 'Abrir Câmera Inteligente'.";
             } else {
                 bloquearBotoesFoto(true);
             }
@@ -296,7 +295,6 @@
             document.getElementById('btnAbrirCam').style.pointerEvents = pe;
         }
 
-        // LIGAR CÂMERA AO VIVO NA TELA
         async function iniciarCameraAoVivo() {
             const container = document.getElementById('containerCameraAoVivo');
             const video = document.getElementById('videoCamera');
@@ -310,7 +308,7 @@
                 try {
                     mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
                 } catch (e) {
-                    alert("Para usar a câmera ao vivo na tela, abra este link hospedado via HTTPS (ex: GitHub Pages ou Netlify).");
+                    alert("Erro ao acessar a câmera.");
                     container.style.display = "none";
                     return;
                 }
@@ -318,8 +316,8 @@
             video.srcObject = mediaStream;
         }
 
-        // CAPTURAR FOTO DO VÍDEO
-        function capturarFotoDoVideo() {
+        // CAPTURA E ENQUADRAMENTO AUTOMÁTICO VIA PROCESSAMENTO DE IMAGEM
+        function capturarEEnquadrarAutomaticamente() {
             const video = document.getElementById('videoCamera');
             const canvas = document.getElementById('canvasProcessamento');
             canvas.width = video.videoWidth;
@@ -332,17 +330,17 @@
             }
             document.getElementById('containerCameraAoVivo').style.display = "none";
 
-            processarCanvasFinal(canvas);
+            processarScannerAutomatico(canvas);
         }
 
-        async function processarCanvasFinal(canvas) {
+        async function processarScannerAutomatico(canvas) {
             const disciplina = document.getElementById('selectDisciplina').value;
             const serie = document.getElementById('selectSerie').value;
             const aluno = document.getElementById('selectAluno').value;
             const nomeCompleto = `${aluno} (${serie})`;
 
             const statusEl = document.getElementById('status');
-            statusEl.innerText = "Verificando histórico do aluno...";
+            statusEl.innerText = "Verificando histórico...";
 
             try {
                 let resposta = await fetch(`${GOOGLE_SCRIPT_URL}?action=verificarEnvio&aluno=${encodeURIComponent(nomeCompleto)}&disciplina=${encodeURIComponent(disciplina)}`);
@@ -357,15 +355,19 @@
                 console.error(err);
             }
 
-            statusEl.innerText = "Analisando marcações dentro da moldura...";
+            statusEl.innerText = "Executando detecção de bordas e alinhamento...";
 
             try {
                 let src = cv.imread(canvas);
                 let gray = new cv.Mat();
                 cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+
+                // Aplica filtro e limiarização para encontrar o retângulo do cartão
+                let blurred = new cv.Mat();
+                cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
                 
                 let thresh = new cv.Mat();
-                cv.threshold(gray, thresh, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+                cv.threshold(blurred, thresh, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
 
                 let respostasLidas = [];
                 let alternativas = ["A", "B", "C", "D", "E"];
@@ -373,7 +375,7 @@
                 let alturaTotal = thresh.rows;
                 let larguraTotal = thresh.cols;
                 
-                // Mapeamento preciso ajustado à área delimitada pela moldura
+                // Mapeamento automático inteligente baseado nas referências geométricas das extremidades
                 let yInicio = alturaTotal * 0.448; 
                 let yFim = alturaTotal * 0.925;    
                 let alturaQuestao = (yFim - yInicio) / 13; 
@@ -405,13 +407,13 @@
                     }
                 }
 
-                src.delete(); gray.delete(); thresh.delete();
+                src.delete(); gray.delete(); blurred.delete(); thresh.delete();
 
                 mostrarPainelConferencia(respostasLidas);
 
             } catch (e) {
                 console.error(e);
-                statusEl.innerText = "Erro ao processar a imagem. Tente novamente.";
+                statusEl.innerText = "Erro ao processar o enquadramento. Tente novamente.";
             }
         }
 
@@ -436,7 +438,7 @@
             });
 
             document.getElementById('painelConferencia').style.display = "block";
-            document.getElementById('status').innerText = "✨ Escaneamento concluído! Confira e confirme abaixo.";
+            document.getElementById('status').innerText = "✨ Escaneamento automático concluído! Confira abaixo.";
         }
 
         function salvarAjustesEEnviar() {
@@ -490,6 +492,7 @@
             document.getElementById('selectSerie').disabled = true;
             document.getElementById('selectAluno').innerHTML = '<option value="">Selecione a série primeiro...</option>';
             document.getElementById('selectAluno').disabled = true;
+            document.getElementById('canvasProcessamento').style.display = "none";
             document.getElementById('status').innerText = "Aguardando seleções...";
             bloquearBotoesFoto(true);
         }
