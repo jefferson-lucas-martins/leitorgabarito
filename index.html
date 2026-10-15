@@ -178,9 +178,9 @@
         <div id="containerCameraAoVivo">
             <video id="videoCamera" autoplay playsinline></video>
             <div class="moldura-guia">
-                <div class="tag-ponta">🎯 Q1 (Topo Esquerdo)</div>
-                <div style="font-size: 10px; color: #bae6fd; background: rgba(0,0,0,0.7); padding: 3px 8px; border-radius: 4px;">Alinhe o cartão dentro do visor</div>
-                <div class="tag-ponta">🎯 Q26 (Baixo Direito)</div>
+                <div class="tag-ponta">🎯 CAIXA DE RESPOSTAS</div>
+                <div style="font-size: 10px; color: #bae6fd; background: rgba(0,0,0,0.7); padding: 3px 8px; border-radius: 4px;">Enquadre o quadro de bolhas dentro do visor azul</div>
+                <div class="tag-ponta">🎯 EEMTI</div>
             </div>
             <button class="btn-action btn-camera" style="margin: 10px auto; width: calc(100% - 20px); background-color: #0284c7;" onclick="capturarEEnquadrarAutomaticamente()">⚡ Detectar e Escanear</button>
         </div>
@@ -189,7 +189,7 @@
     <!-- PAINEL DE CONFERÊNCIA DAS 26 QUESTÕES -->
     <div id="painelConferencia">
         <h4 style="margin:0 0 5px 0; color:var(--primary); font-size:14px;">🔍 Confira a Leitura das 26 Questões:</h4>
-        <p style="font-size: 11px; color: var(--text-muted); margin-top:0;">O sistema detectou as bordas e leu os itens abaixo:</p>
+        <p style="font-size: 11px; color: var(--text-muted); margin-top:0;">O sistema detectou o quadro de respostas e leu os itens abaixo:</p>
         <div id="listaRespostasEditaveis" class="tabela-respostas"></div>
         <div style="margin-top: 12px; display: flex; gap: 8px;">
             <button class="btn-action btn-camera" style="flex:1; padding:10px; margin:0;" onclick="salvarAjustesEEnviar()">✅ Salvar e Enviar</button>
@@ -213,6 +213,7 @@
 </div>
 
     <script>
+        // SUBSTITUA ESTA URL PELA SUA URL DO GOOGLE APPS SCRIPT
         const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzoJgP4HgHv3e1NGYI5pfLgUBPiTaKnNY18b8Ba5Lc47orQiDcjrGETpgxn7jyn7Iw7/exec"; 
         
         const GABARITO_OFICIAL = [
@@ -308,7 +309,7 @@
                 try {
                     mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
                 } catch (e) {
-                    alert("Erro ao acessar a câmera.");
+                    alert("Erro ao acessar a câmera. Tente por conexão HTTPS segura.");
                     container.style.display = "none";
                     return;
                 }
@@ -316,7 +317,6 @@
             video.srcObject = mediaStream;
         }
 
-        // CAPTURA E ENQUADRAMENTO AUTOMÁTICO VIA PROCESSAMENTO DE IMAGEM
         function capturarEEnquadrarAutomaticamente() {
             const video = document.getElementById('videoCamera');
             const canvas = document.getElementById('canvasProcessamento');
@@ -355,30 +355,62 @@
                 console.error(err);
             }
 
-            statusEl.innerText = "Executando detecção de bordas e alinhamento...";
+            statusEl.innerText = "Localizando a caixa do gabarito...";
 
             try {
                 let src = cv.imread(canvas);
                 let gray = new cv.Mat();
                 cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
 
-                // Aplica filtro e limiarização para encontrar o retângulo do cartão
+                // Aplicar desfoque e encontrar bordas
                 let blurred = new cv.Mat();
                 cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
                 
+                let edges = new cv.Mat();
+                cv.Canny(blurred, edges, 50, 150);
+
+                let contours = new cv.MatVector();
+                let hierarchy = new cv.Mat();
+                cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+                // Localiza o maior retângulo (que deve ser a borda preta espessa do gabarito)
+                let maxArea = 0;
+                let boundingBox = null;
+
+                for (let i = 0; i < contours.size(); ++i) {
+                    let cnt = contours.get(i);
+                    let area = cv.contourArea(cnt);
+                    if (area > 5000 && area > maxArea) {
+                        let rect = cv.boundingRect(cnt);
+                        // Filtro de proporção: a caixa do gabarito é retangular deitada/proporcional
+                        let aspecto = rect.width / rect.height;
+                        if (aspecto > 0.5 && aspecto < 2.5) {
+                            maxArea = area;
+                            boundingBox = rect;
+                        }
+                    }
+                }
+
+                if (!boundingBox) {
+                    throw new Error("Caixa do gabarito não detectada na imagem.");
+                }
+
+                // Recortar apenas a área do gabarito
+                let roi = gray.roi(boundingBox);
                 let thresh = new cv.Mat();
-                cv.threshold(blurred, thresh, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+                cv.threshold(roi, thresh, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
 
                 let respostasLidas = [];
                 let alternativas = ["A", "B", "C", "D", "E"];
                 
-                let alturaTotal = thresh.rows;
-                let larguraTotal = thresh.cols;
+                let W = thresh.cols;
+                let H = thresh.rows;
                 
-                // Mapeamento automático inteligente baseado nas referências geométricas das extremidades
-                let yInicio = alturaTotal * 0.448; 
-                let yFim = alturaTotal * 0.925;    
-                let alturaQuestao = (yFim - yInicio) / 13; 
+                // Mapeamento proporcional à nova caixa do gabarito
+                // A caixa contém duas colunas com padding interno.
+                let yStart = H * 0.05; 
+                let yEnd = H * 0.95;    
+                let rowH = (yEnd - yStart) / 12; // Divisão em 13 linhas de bolhas
 
                 for (let col = 0; col < 2; col++) {
                     for (let q = 0; q < 13; q++) {
@@ -387,14 +419,21 @@
 
                         let melhorAlternativa = "A";
                         let maxPixels = -1;
-                        let yPos = yInicio + (q * alturaQuestao);
+                        let yPos = yStart + (q * rowH);
 
                         for (let a = 0; a < 5; a++) {
-                            let xBase = col === 0 ? larguraTotal * 0.174 : larguraTotal * 0.578;
-                            let espacamentoBolha = larguraTotal * 0.052;
+                            // Ajuste posicional: Coluna 0 começa em ~18% da largura, Coluna 1 em ~68%
+                            let xBase = col === 0 ? W * 0.18 : W * 0.68;
+                            let espacamentoBolha = W * 0.06; // Espaço entre as bolhas A, B, C...
                             let xPos = xBase + (a * espacamentoBolha);
 
-                            let regiao = thresh.roi(new cv.Rect(xPos - 7, yPos - 7, 14, 14));
+                            // Tamanho dinâmico do bloco de leitura baseado no tamanho total da caixa
+                            let sampleSize = Math.floor(W * 0.025);
+                            let xTopLeft = Math.max(0, xPos - sampleSize);
+                            let yTopLeft = Math.max(0, yPos - sampleSize);
+                            let sampleRect = new cv.Rect(xTopLeft, yTopLeft, sampleSize * 2, sampleSize * 2);
+                            
+                            let regiao = thresh.roi(sampleRect);
                             let contagemPixels = cv.countNonZero(regiao);
                             
                             if (contagemPixels > maxPixels) {
@@ -407,13 +446,15 @@
                     }
                 }
 
-                src.delete(); gray.delete(); blurred.delete(); thresh.delete();
+                // Limpeza da memória
+                src.delete(); gray.delete(); blurred.delete(); edges.delete();
+                contours.delete(); hierarchy.delete(); roi.delete(); thresh.delete();
 
                 mostrarPainelConferencia(respostasLidas);
 
             } catch (e) {
                 console.error(e);
-                statusEl.innerText = "Erro ao processar o enquadramento. Tente novamente.";
+                statusEl.innerText = "Erro: " + e.message + " Aproxime o celular e tente novamente.";
             }
         }
 
@@ -438,7 +479,7 @@
             });
 
             document.getElementById('painelConferencia').style.display = "block";
-            document.getElementById('status').innerText = "✨ Escaneamento automático concluído! Confira abaixo.";
+            document.getElementById('status').innerText = "✨ Leitura do quadro concluída! Confira abaixo.";
         }
 
         function salvarAjustesEEnviar() {
