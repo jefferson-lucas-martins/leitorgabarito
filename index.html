@@ -74,7 +74,7 @@
         }
         .moldura-guia {
             position: absolute;
-            top: 12%; left: 10%; right: 10%; bottom: 12%;
+            top: 10%; left: 10%; right: 10%; bottom: 10%;
             border: 3px solid #38bdf8;
             border-radius: 12px;
             pointer-events: none;
@@ -88,7 +88,6 @@
             transition: border-color 0.2s ease, box-shadow 0.2s ease;
         }
         
-        /* Estado quando enquadrado corretamente */
         .moldura-guia.enquadrado {
             border-color: var(--success) !important;
             box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.5), inset 0 0 15px rgba(34, 197, 94, 0.4);
@@ -237,7 +236,7 @@
         let mediaStream = null;
         let monitorAoVivoAtivo = false;
         let contadorEstabilidade = 0;
-        const LIMIAR_ESTABILIDADE = 6; // Requer ~0.6 segundos de enquadramento firme
+        const LIMIAR_ESTABILIDADE = 6; // 6 frames (aprox 0.6 segs de estabilidade verde) para bater a foto sozinho
 
         function verificarLiberacao() {
             const disc = document.getElementById('selectDisciplina').value;
@@ -318,13 +317,13 @@
 
             try {
                 mediaStream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: { exact: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }
+                    video: { facingMode: { exact: "environment" } }
                 });
             } catch (err) {
                 try {
                     mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
                 } catch (e) {
-                    alert("Erro ao acessar a câmera.");
+                    alert("Erro ao acessar a câmera. Tente por conexão HTTPS segura.");
                     container.style.display = "none";
                     return;
                 }
@@ -339,7 +338,7 @@
             };
         }
 
-        // MOTOR DE MONITORAMENTO DE ENQUADRAMENTO EM TEMPO REAL
+        // MOTOR DE MONITORAMENTO DE ENQUADRAMENTO EM TEMPO REAL (NOVO AUTO-SCANNER)
         function loopDeteccaoAoVivo() {
             if (!monitorAoVivoAtivo) return;
 
@@ -358,7 +357,7 @@
 
                     if (contadorEstabilidade >= LIMIAR_ESTABILIDADE) {
                         monitorAoVivoAtivo = false;
-                        if (navigator.vibrate) navigator.vibrate(150); // Sinal tátil
+                        if (navigator.vibrate) navigator.vibrate(150); // Sinal tátil no celular
                         executarCapturaEProcessamento();
                         return;
                     }
@@ -369,7 +368,7 @@
                 }
 
                 loopDeteccaoAoVivo();
-            }, 100); // 10 FPS de análise para economia de bateria e performance fluida
+            }, 100); 
         }
 
         function checarEnquadramentoFrame() {
@@ -379,7 +378,6 @@
             const canvasAnalise = document.getElementById('canvasAnaliseAoVivo');
             if (video.videoWidth === 0) return false;
 
-            // Analisa em versão reduzida (320px) para máxima velocidade de resposta
             canvasAnalise.width = 320;
             canvasAnalise.height = Math.floor(video.videoHeight * (320 / video.videoWidth));
             const ctx = canvasAnalise.getContext('2d');
@@ -411,8 +409,7 @@
                         let rect = cv.boundingRect(cnt);
                         let aspecto = rect.width / rect.height;
 
-                        // Verifica se o retângulo tem proporção compatível e está relativamente centralizado
-                        if (aspecto > 0.5 && aspecto < 2.2) {
+                        if (aspecto > 0.5 && aspecto < 2.5) {
                             let centroX = rect.x + (rect.width / 2);
                             let centroY = rect.y + (rect.height / 2);
 
@@ -480,7 +477,7 @@
                 console.error(err);
             }
 
-            statusEl.innerText = "Processando leitura OMR...";
+            statusEl.innerText = "Localizando a caixa do gabarito...";
 
             try {
                 let src = cv.imread(canvas);
@@ -513,14 +510,8 @@
                     }
                 }
 
-                // Fallback caso a caixa externa não seja isolada: processa a área central da imagem
                 if (!boundingBox) {
-                    boundingBox = new cv.Rect(
-                        Math.floor(canvas.width * 0.1),
-                        Math.floor(canvas.height * 0.1),
-                        Math.floor(canvas.width * 0.8),
-                        Math.floor(canvas.height * 0.8)
-                    );
+                    throw new Error("Caixa do gabarito não detectada na imagem.");
                 }
 
                 let roi = gray.roi(boundingBox);
@@ -535,7 +526,7 @@
                 
                 let yStart = H * 0.05; 
                 let yEnd = H * 0.95;    
-                let rowH = (yEnd - yStart) / 13; 
+                let rowH = (yEnd - yStart) / 12; // Divisão em linhas de bolhas
 
                 for (let col = 0; col < 2; col++) {
                     for (let q = 0; q < 13; q++) {
@@ -548,12 +539,12 @@
 
                         for (let a = 0; a < 5; a++) {
                             let xBase = col === 0 ? W * 0.18 : W * 0.68;
-                            let espacamentoBolha = W * 0.06;
+                            let espacamentoBolha = W * 0.06; 
                             let xPos = xBase + (a * espacamentoBolha);
 
-                            let sampleSize = Math.max(3, Math.floor(W * 0.02));
-                            let xTopLeft = Math.max(0, Math.floor(xPos - sampleSize));
-                            let yTopLeft = Math.max(0, Math.floor(yPos - sampleSize));
+                            let sampleSize = Math.floor(W * 0.025);
+                            let xTopLeft = Math.max(0, xPos - sampleSize);
+                            let yTopLeft = Math.max(0, yPos - sampleSize);
                             let sampleRect = new cv.Rect(xTopLeft, yTopLeft, sampleSize * 2, sampleSize * 2);
                             
                             let regiao = thresh.roi(sampleRect);
@@ -576,7 +567,7 @@
 
             } catch (e) {
                 console.error(e);
-                statusEl.innerText = "Erro ao ler as marcações. Tente escanear novamente com mais luz.";
+                statusEl.innerText = "Erro: " + e.message + " Aproxime o celular e tente novamente.";
             }
         }
 
@@ -601,7 +592,7 @@
             });
 
             document.getElementById('painelConferencia').style.display = "block";
-            document.getElementById('status').innerText = "✨ Escaneamento concluído com sucesso!";
+            document.getElementById('status').innerText = "✨ Leitura do quadro concluída! Confira abaixo.";
         }
 
         function salvarAjustesEEnviar() {
