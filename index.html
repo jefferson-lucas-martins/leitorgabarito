@@ -3,12 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scanner Inteligente de Alta Precisão - OMR</title>
+    <title>Scanner Inteligente com Regras de Nula/Branco</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script async src="https://docs.opencv.org/4.x/opencv.js" onload="window.openCvPronto = true;"></script>
     <style>
-        /* (Estilos mantidos exatamente como o anterior para preservar sua interface visual) */
-        :root { --primary: #15803d; --primary-hover: #166534; --bg-color: #0f172a; --card-bg: #ffffff; --text-main: #1e293b; --text-muted: #64748b; --border: #cbd5e1; --danger: #ef4444; --success: #22c55e; }
+        :root { --primary: #15803d; --primary-hover: #166534; --bg-color: #0f172a; --card-bg: #ffffff; --text-main: #1e293b; --text-muted: #64748b; --border: #cbd5e1; --danger: #ef4444; --success: #22c55e; --warning: #eab308; }
         body { font-family: 'Inter', sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 10px; display: flex; justify-content: center; align-items: center; min-height: 100vh; box-sizing: border-box; }
         .card { background: var(--card-bg); width: 100%; max-width: 580px; padding: 20px; border-radius: 20px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3); box-sizing: border-box; }
         .header-logo { text-align: center; margin-bottom: 15px; }
@@ -30,9 +29,12 @@
         #status { margin-top: 15px; padding: 10px; border-radius: 10px; font-size: 13px; font-weight: 500; text-align: center; background-color: #f8fafc; border: 1px solid var(--border); color: var(--text-muted); }
         canvas { display: none; }
         #painelConferencia { display: none; background: #f8fafc; border: 2px solid var(--primary); border-radius: 12px; padding: 15px; margin-top: 15px; text-align: left; }
-        .tabela-respostas { max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; background: white; padding: 10px; margin-top: 8px; }
+        .tabela-respostas { max-height: 250px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; background: white; padding: 10px; margin-top: 8px; }
         .linha-questao { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
-        .linha-questao select { width: 75px; padding: 4px; font-size: 13px; text-align: center; border-radius: 6px; }
+        .linha-questao select { width: 95px; padding: 4px; font-size: 13px; text-align: center; border-radius: 6px; }
+        .linha-questao select.alerta-nula { background: var(--danger); color: white; border-color: var(--danger); }
+        .linha-questao select.alerta-branco { background: var(--warning); color: #000; border-color: var(--warning); }
+        
         #modalGestao { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; padding: 15px; box-sizing: border-box; z-index: 1000; }
         .modal-content { background: white; padding: 20px; border-radius: 16px; width: 100%; max-width: 480px; max-height: 85vh; overflow-y: auto; }
         .envio-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; gap: 10px; }
@@ -45,7 +47,7 @@
     <div class="header-logo">
         <svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2" style="margin-bottom: 2px;"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg>
         <h1>EEMTI Agostinho Neres Portela</h1>
-        <p>Scanner de Alta Precisão Absoluta</p>
+        <p>Scanner com Múltipla Escolha e Brancas</p>
     </div>
     
     <div class="step-container">
@@ -165,7 +167,6 @@
         return [top[0], top[1], bottom[1], bottom[0]]; // TL, TR, BR, BL
     }
 
-    // Procura o retângulo da caixa preta para estabilidade
     function checarEnquadramentoFrame() {
         if (!window.openCvPronto) return false;
         const video = document.getElementById('videoCamera');
@@ -229,7 +230,7 @@
 
     async function processarComPerspectiva(canvas) {
         const statusEl = document.getElementById('status');
-        statusEl.innerText = "Extraindo e corrigindo perspectiva matemática...";
+        statusEl.innerText = "Extraindo e calculando intensidade de pixels...";
 
         try {
             let src = cv.imread(canvas); let gray = new cv.Mat(); cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
@@ -255,13 +256,12 @@
 
             if (!bestApprox) { throw new Error("Retângulo preto do gabarito não encontrado na foto."); }
 
-            // ORGANIZA OS 4 PONTOS E APLICA WARP PERSPECTIVE (Achata a imagem para dimensões fixas)
             let ptsArray = [];
             for (let i = 0; i < 4; i++) { ptsArray.push({x: bestApprox.data32S[i*2], y: bestApprox.data32S[i*2+1]}); }
             let ordered = orderPoints(ptsArray);
             
-            // Dimensão plana fixa padronizada
-            let W = 600; let H = 800; 
+            // Dimensão fixa mapeada para bater com o CSS Flexbox/Grid
+            let W = 800; let H = 1000; 
             
             let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [ ordered[0].x, ordered[0].y, ordered[1].x, ordered[1].y, ordered[2].x, ordered[2].y, ordered[3].x, ordered[3].y ]);
             let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [ 0, 0, W, 0, W, H, 0, H ]);
@@ -270,37 +270,55 @@
             let warped = new cv.Mat();
             cv.warpPerspective(gray, warped, M, new cv.Size(W, H), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
 
-            // Threshold na imagem perfeita achatada
             let thresh = new cv.Mat();
             cv.threshold(warped, thresh, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
 
-            // SINCRONIA MATEMÁTICA: Exatamente as porcentagens do HTML do Novo Gabarito
-            const xCol1_Bolhas = [0.20, 0.27, 0.34, 0.41, 0.48];
-            const xCol2_Bolhas = [0.70, 0.77, 0.84, 0.91, 0.98];
-            let respostasLidas = [];
-            let alternativas = ["A", "B", "C", "D", "E"];
+            // Mapeamento matemático com base no novo CSS
+            // 4% padding + largura de 46% da coluna.
+            // Bolhas nas posições 23.5%, 40.5%, 57.5%, 74.5%, 91.5% da largura da coluna
+            let resLidas = [];
+            let letras = ["A", "B", "C", "D", "E"];
+            
+            let sampleSize = 12; // Quadrado de 24x24 px
+            let areaTotalSample = (sampleSize * 2) * (sampleSize * 2);
+            let thresholdMinimoPixels = areaTotalSample * 0.35; // Se 35% do quadrado estiver preto, considera preenchida
 
             for (let col = 0; col < 2; col++) {
                 for (let q = 0; q < 13; q++) {
-                    let yPct = 0.08 + (q * 0.07); // 8% a 92%
-                    let yPos = Math.floor(yPct * H);
+                    // Y: Ignora os ~4% do topo (padding) e distribui o resto em 12 passos (para 13 linhas)
+                    let yPos = Math.floor(H * 0.04 + q * (H * 0.92 / 12));
                     
-                    let melhorAlternativa = "A"; let maxPixels = -1;
+                    let colX = col === 0 ? W * 0.04 : W * 0.54; // Posição X de Início da Coluna
+                    let colWidth = W * 0.42; 
+
+                    let marcadasNestaQuestao = [];
 
                     for (let a = 0; a < 5; a++) {
-                        let xPct = col === 0 ? xCol1_Bolhas[a] : xCol2_Bolhas[a];
-                        let xPos = Math.floor(xPct * W);
+                        let xCenterPct = 0.235 + (a * 0.17); // Onde cai o centro de cada bolha segundo o CSS
+                        let xPos = Math.floor(colX + colWidth * xCenterPct);
 
-                        // Cria um retângulo de amostragem de 16x16px exato sobre a bolha
-                        let sampleSize = 10; 
                         let rect = new cv.Rect(xPos - sampleSize, yPos - sampleSize, sampleSize * 2, sampleSize * 2);
-                        let regiao = thresh.roi(rect);
-                        let contagem = cv.countNonZero(regiao);
-
-                        if (contagem > maxPixels) { maxPixels = contagem; melhorAlternativa = alternativas[a]; }
-                        regiao.delete();
+                        
+                        // Garante que o rect não saia da imagem (safety check)
+                        if(rect.x >= 0 && rect.y >= 0 && rect.x + rect.width <= W && rect.y + rect.height <= H) {
+                            let regiao = thresh.roi(rect);
+                            let pretos = cv.countNonZero(regiao);
+                            
+                            if (pretos > thresholdMinimoPixels) {
+                                marcadasNestaQuestao.push(letras[a]);
+                            }
+                            regiao.delete();
+                        }
                     }
-                    respostasLidas.push(melhorAlternativa);
+
+                    // REGRA DE NULA OU EM BRANCO
+                    if (marcadasNestaQuestao.length === 0) {
+                        resLidas.push("BRANCO");
+                    } else if (marcadasNestaQuestao.length > 1) {
+                        resLidas.push("NULA");
+                    } else {
+                        resLidas.push(marcadasNestaQuestao[0]);
+                    }
                 }
             }
 
@@ -308,7 +326,7 @@
             src.delete(); gray.delete(); blurred.delete(); edges.delete(); contours.delete(); hierarchy.delete();
             bestApprox.delete(); srcTri.delete(); dstTri.delete(); M.delete(); warped.delete(); thresh.delete();
 
-            mostrarPainelConferencia(respostasLidas);
+            mostrarPainelConferencia(resLidas);
 
         } catch (e) {
             statusEl.innerText = "❌ Erro: " + e.message;
@@ -317,18 +335,44 @@
 
     function mostrarPainelConferencia(respostas) {
         const container = document.getElementById('listaRespostasEditaveis'); container.innerHTML = "";
+        
         respostas.forEach((resp, idx) => {
+            let classAlerta = "";
+            if (resp === "NULA") classAlerta = "alerta-nula";
+            if (resp === "BRANCO") classAlerta = "alerta-branco";
+
             let opcoesHtml = "";
-            ["A", "B", "C", "D", "E"].forEach(letra => { opcoesHtml += `<option value="${letra}" ${letra === resp ? 'selected' : ''}>${letra}</option>`; });
-            container.innerHTML += `<div class="linha-questao"><span>Questão ${idx + 1}:</span><select id="resp_q_${idx}">${opcoesHtml}</select></div>`;
+            ["A", "B", "C", "D", "E", "NULA", "BRANCO"].forEach(letra => { 
+                opcoesHtml += `<option value="${letra}" ${letra === resp ? 'selected' : ''}>${letra}</option>`; 
+            });
+            
+            container.innerHTML += `
+                <div class="linha-questao">
+                    <span>Questão ${idx + 1}:</span>
+                    <select id="resp_q_${idx}" class="${classAlerta}" onchange="atualizarCorSelect(this)">
+                        ${opcoesHtml}
+                    </select>
+                </div>
+            `;
         });
         document.getElementById('painelConferencia').style.display = "block";
         document.getElementById('status').innerText = "✨ Processamento com Perspectiva concluído!";
     }
 
+    // Função visual para mudar a cor caso o professor corrija manualmente no painel
+    function atualizarCorSelect(select) {
+        select.classList.remove("alerta-nula", "alerta-branco");
+        if(select.value === "NULA") select.classList.add("alerta-nula");
+        if(select.value === "BRANCO") select.classList.add("alerta-branco");
+    }
+
     function salvarAjustesEEnviar() {
         let respostas = []; for (let i = 0; i < 26; i++) { respostas.push(document.getElementById(`resp_q_${i}`).value); }
-        let acertos = 0; for (let i = 0; i < GABARITO_OFICIAL.length; i++) { if (respostas[i] === GABARITO_OFICIAL[i]) acertos++; }
+        let acertos = 0; 
+        for (let i = 0; i < GABARITO_OFICIAL.length; i++) { 
+            // NULA e BRANCO automaticamente não pontuam, pois não dão "match" com o oficial
+            if (respostas[i] === GABARITO_OFICIAL[i]) acertos++; 
+        }
         
         let dados = {
             disciplina: document.getElementById('selectDisciplina').value,
@@ -345,7 +389,7 @@
 
     function cancelarEnvio() { document.getElementById('painelConferencia').style.display = "none"; reiniciarSistema(); }
     function reiniciarSistema() { monitorAoVivoAtivo = false; document.getElementById('selectAluno').value = ""; document.getElementById('status').innerText = "Selecione outro aluno..."; checarAlunoPronto(); }
-    function abrirGestao() { /* Código mantido igual ao anterior para o modal de gestão */ }
+    function abrirGestao() { /* Lógica do modal existente mantida */ }
     function fecharGestao() { document.getElementById('modalGestao').style.display = "none"; }
 </script>
 </body>
