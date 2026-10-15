@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scanner Inteligente com Enquadramento Automático - EEMTI Agostinho Neres Portela</title>
+    <title>Scanner Inteligente com Auto-Capture - EEMTI Agostinho Neres Portela</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script async src="https://docs.opencv.org/4.x/opencv.js" onload="console.log('OpenCV pronto.');"></script>
+    <script async src="https://docs.opencv.org/4.x/opencv.js" onload="window.openCvPronto = true; console.log('OpenCV pronto.');"></script>
     <style>
         :root {
             --primary: #15803d;
@@ -16,6 +16,7 @@
             --text-muted: #64748b;
             --border: #cbd5e1;
             --danger: #ef4444;
+            --success: #22c55e;
         }
 
         body {
@@ -55,7 +56,7 @@
         select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(21, 128, 61, 0.15); }
         select:disabled { background-color: #f8fafc; color: var(--text-muted); cursor: not-allowed; }
 
-        /* TELA DE CÂMERA AO VIVO COM DETECÇÃO AUTOMÁTICA */
+        /* TELA DE CÂMERA AO VIVO COM AUTO-CAPTURE */
         #containerCameraAoVivo {
             display: none;
             position: relative;
@@ -73,7 +74,7 @@
         }
         .moldura-guia {
             position: absolute;
-            top: 10%; left: 10%; right: 10%; bottom: 10%;
+            top: 12%; left: 10%; right: 10%; bottom: 12%;
             border: 3px solid #38bdf8;
             border-radius: 12px;
             pointer-events: none;
@@ -84,15 +85,27 @@
             align-items: center;
             padding: 10px;
             box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.5);
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
         }
-        .tag-ponta {
+        
+        /* Estado quando enquadrado corretamente */
+        .moldura-guia.enquadrado {
+            border-color: var(--success) !important;
+            box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.5), inset 0 0 15px rgba(34, 197, 94, 0.4);
+        }
+
+        .tag-status-cam {
             background: rgba(14, 165, 233, 0.95);
             color: white;
             font-size: 11px;
             font-weight: bold;
-            padding: 5px 12px;
+            padding: 6px 14px;
             border-radius: 6px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            transition: background 0.2s;
+        }
+        .enquadrado .tag-status-cam {
+            background: var(--success);
         }
 
         .button-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 5px; }
@@ -143,7 +156,7 @@
             <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path>
         </svg>
         <h1>EEMTI Agostinho Neres Portela</h1>
-        <p>Scanner com Enquadramento Automático (Q1 a Q26)</p>
+        <p>Scanner Automático por Enquadramento (Q1 a Q26)</p>
     </div>
     
     <div class="step-container">
@@ -177,19 +190,18 @@
         <!-- VÍDEO DA CÂMERA AO VIVO -->
         <div id="containerCameraAoVivo">
             <video id="videoCamera" autoplay playsinline></video>
-            <div class="moldura-guia">
-                <div class="tag-ponta">🎯 CAIXA DE RESPOSTAS</div>
-                <div style="font-size: 10px; color: #bae6fd; background: rgba(0,0,0,0.7); padding: 3px 8px; border-radius: 4px;">Enquadre o quadro de bolhas dentro do visor azul</div>
-                <div class="tag-ponta">🎯 EEMTI</div>
+            <div class="moldura-guia" id="molduraGuia">
+                <div class="tag-status-cam" id="txtInstrucaoCam">🎯 Posicione o cartão na moldura</div>
+                <div style="font-size: 10px; color: #bae6fd; background: rgba(0,0,0,0.7); padding: 3px 8px; border-radius: 4px;">Segure firme quando ficar VERDE</div>
             </div>
-            <button class="btn-action btn-camera" style="margin: 10px auto; width: calc(100% - 20px); background-color: #0284c7;" onclick="capturarEEnquadrarAutomaticamente()">⚡ Detectar e Escanear</button>
+            <button class="btn-action btn-camera" style="margin: 10px auto; width: calc(100% - 20px); background-color: #0284c7;" onclick="forcarCapturaManual()">⚡ Capturar Agora (Manual)</button>
         </div>
     </div>
 
     <!-- PAINEL DE CONFERÊNCIA DAS 26 QUESTÕES -->
     <div id="painelConferencia">
         <h4 style="margin:0 0 5px 0; color:var(--primary); font-size:14px;">🔍 Confira a Leitura das 26 Questões:</h4>
-        <p style="font-size: 11px; color: var(--text-muted); margin-top:0;">O sistema detectou o quadro de respostas e leu os itens abaixo:</p>
+        <p style="font-size: 11px; color: var(--text-muted); margin-top:0;">Leitura concluída com sucesso! Verifique os itens:</p>
         <div id="listaRespostasEditaveis" class="tabela-respostas"></div>
         <div style="margin-top: 12px; display: flex; gap: 8px;">
             <button class="btn-action btn-camera" style="flex:1; padding:10px; margin:0;" onclick="salvarAjustesEEnviar()">✅ Salvar e Enviar</button>
@@ -201,6 +213,7 @@
 
     <div id="status">Aguardando seleções...</div>
     <canvas id="canvasProcessamento"></canvas>
+    <canvas id="canvasAnaliseAoVivo" style="display:none;"></canvas>
 </div>
 
 <div id="modalGestao">
@@ -213,7 +226,6 @@
 </div>
 
     <script>
-        // SUBSTITUA ESTA URL PELA SUA URL DO GOOGLE APPS SCRIPT
         const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzoJgP4HgHv3e1NGYI5pfLgUBPiTaKnNY18b8Ba5Lc47orQiDcjrGETpgxn7jyn7Iw7/exec"; 
         
         const GABARITO_OFICIAL = [
@@ -223,6 +235,9 @@
 
         let dadosGlobais = {};
         let mediaStream = null;
+        let monitorAoVivoAtivo = false;
+        let contadorEstabilidade = 0;
+        const LIMIAR_ESTABILIDADE = 6; // Requer ~0.6 segundos de enquadramento firme
 
         function verificarLiberacao() {
             const disc = document.getElementById('selectDisciplina').value;
@@ -303,21 +318,131 @@
 
             try {
                 mediaStream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: { exact: "environment" } }
+                    video: { facingMode: { exact: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }
                 });
             } catch (err) {
                 try {
                     mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
                 } catch (e) {
-                    alert("Erro ao acessar a câmera. Tente por conexão HTTPS segura.");
+                    alert("Erro ao acessar a câmera.");
                     container.style.display = "none";
                     return;
                 }
             }
             video.srcObject = mediaStream;
+            
+            video.onloadedmetadata = () => {
+                video.play();
+                monitorAoVivoAtivo = true;
+                contadorEstabilidade = 0;
+                loopDeteccaoAoVivo();
+            };
         }
 
-        function capturarEEnquadrarAutomaticamente() {
+        // MOTOR DE MONITORAMENTO DE ENQUADRAMENTO EM TEMPO REAL
+        function loopDeteccaoAoVivo() {
+            if (!monitorAoVivoAtivo) return;
+
+            setTimeout(() => {
+                if (!monitorAoVivoAtivo) return;
+
+                let bemEnquadrado = checarEnquadramentoFrame();
+
+                const moldura = document.getElementById('molduraGuia');
+                const txtInstrucao = document.getElementById('txtInstrucaoCam');
+
+                if (bemEnquadrado) {
+                    contadorEstabilidade++;
+                    moldura.classList.add('enquadrado');
+                    txtInstrucao.innerText = `✅ FIRME! LENDO EM ${Math.max(1, LIMIAR_ESTABILIDADE - contadorEstabilidade)}...`;
+
+                    if (contadorEstabilidade >= LIMIAR_ESTABILIDADE) {
+                        monitorAoVivoAtivo = false;
+                        if (navigator.vibrate) navigator.vibrate(150); // Sinal tátil
+                        executarCapturaEProcessamento();
+                        return;
+                    }
+                } else {
+                    contadorEstabilidade = 0;
+                    moldura.classList.remove('enquadrado');
+                    txtInstrucao.innerText = "🎯 Enquadre o cartão na moldura";
+                }
+
+                loopDeteccaoAoVivo();
+            }, 100); // 10 FPS de análise para economia de bateria e performance fluida
+        }
+
+        function checarEnquadramentoFrame() {
+            if (!window.openCvPronto) return false;
+
+            const video = document.getElementById('videoCamera');
+            const canvasAnalise = document.getElementById('canvasAnaliseAoVivo');
+            if (video.videoWidth === 0) return false;
+
+            // Analisa em versão reduzida (320px) para máxima velocidade de resposta
+            canvasAnalise.width = 320;
+            canvasAnalise.height = Math.floor(video.videoHeight * (320 / video.videoWidth));
+            const ctx = canvasAnalise.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvasAnalise.width, canvasAnalise.height);
+
+            try {
+                let src = cv.imread(canvasAnalise);
+                let gray = new cv.Mat();
+                cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+
+                let blurred = new cv.Mat();
+                cv.GaussianBlur(gray, blurred, new cv.Size(3, 3), 0);
+
+                let edges = new cv.Mat();
+                cv.Canny(blurred, edges, 40, 120);
+
+                let contours = new cv.MatVector();
+                let hierarchy = new cv.Mat();
+                cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+                let areaMinima = (canvasAnalise.width * canvasAnalise.height) * 0.18; 
+                let achouCartaoValido = false;
+
+                for (let i = 0; i < contours.size(); ++i) {
+                    let cnt = contours.get(i);
+                    let area = cv.contourArea(cnt);
+
+                    if (area > areaMinima) {
+                        let rect = cv.boundingRect(cnt);
+                        let aspecto = rect.width / rect.height;
+
+                        // Verifica se o retângulo tem proporção compatível e está relativamente centralizado
+                        if (aspecto > 0.5 && aspecto < 2.2) {
+                            let centroX = rect.x + (rect.width / 2);
+                            let centroY = rect.y + (rect.height / 2);
+
+                            let emCentroHoriz = centroX > (canvasAnalise.width * 0.25) && centroX < (canvasAnalise.width * 0.75);
+                            let emCentroVert = centroY > (canvasAnalise.height * 0.20) && centroY < (canvasAnalise.height * 0.80);
+
+                            if (emCentroHoriz && emCentroVert) {
+                                achouCartaoValido = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                src.delete(); gray.delete(); blurred.delete(); edges.delete();
+                contours.delete(); hierarchy.delete();
+
+                return achouCartaoValido;
+
+            } catch (err) {
+                return false;
+            }
+        }
+
+        function forcarCapturaManual() {
+            monitorAoVivoAtivo = false;
+            executarCapturaEProcessamento();
+        }
+
+        function executarCapturaEProcessamento() {
             const video = document.getElementById('videoCamera');
             const canvas = document.getElementById('canvasProcessamento');
             canvas.width = video.videoWidth;
@@ -355,14 +480,13 @@
                 console.error(err);
             }
 
-            statusEl.innerText = "Localizando a caixa do gabarito...";
+            statusEl.innerText = "Processando leitura OMR...";
 
             try {
                 let src = cv.imread(canvas);
                 let gray = new cv.Mat();
                 cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
 
-                // Aplicar desfoque e encontrar bordas
                 let blurred = new cv.Mat();
                 cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
                 
@@ -373,7 +497,6 @@
                 let hierarchy = new cv.Mat();
                 cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-                // Localiza o maior retângulo (que deve ser a borda preta espessa do gabarito)
                 let maxArea = 0;
                 let boundingBox = null;
 
@@ -382,7 +505,6 @@
                     let area = cv.contourArea(cnt);
                     if (area > 5000 && area > maxArea) {
                         let rect = cv.boundingRect(cnt);
-                        // Filtro de proporção: a caixa do gabarito é retangular deitada/proporcional
                         let aspecto = rect.width / rect.height;
                         if (aspecto > 0.5 && aspecto < 2.5) {
                             maxArea = area;
@@ -391,11 +513,16 @@
                     }
                 }
 
+                // Fallback caso a caixa externa não seja isolada: processa a área central da imagem
                 if (!boundingBox) {
-                    throw new Error("Caixa do gabarito não detectada na imagem.");
+                    boundingBox = new cv.Rect(
+                        Math.floor(canvas.width * 0.1),
+                        Math.floor(canvas.height * 0.1),
+                        Math.floor(canvas.width * 0.8),
+                        Math.floor(canvas.height * 0.8)
+                    );
                 }
 
-                // Recortar apenas a área do gabarito
                 let roi = gray.roi(boundingBox);
                 let thresh = new cv.Mat();
                 cv.threshold(roi, thresh, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
@@ -406,11 +533,9 @@
                 let W = thresh.cols;
                 let H = thresh.rows;
                 
-                // Mapeamento proporcional à nova caixa do gabarito
-                // A caixa contém duas colunas com padding interno.
                 let yStart = H * 0.05; 
                 let yEnd = H * 0.95;    
-                let rowH = (yEnd - yStart) / 12; // Divisão em 13 linhas de bolhas
+                let rowH = (yEnd - yStart) / 13; 
 
                 for (let col = 0; col < 2; col++) {
                     for (let q = 0; q < 13; q++) {
@@ -422,15 +547,13 @@
                         let yPos = yStart + (q * rowH);
 
                         for (let a = 0; a < 5; a++) {
-                            // Ajuste posicional: Coluna 0 começa em ~18% da largura, Coluna 1 em ~68%
                             let xBase = col === 0 ? W * 0.18 : W * 0.68;
-                            let espacamentoBolha = W * 0.06; // Espaço entre as bolhas A, B, C...
+                            let espacamentoBolha = W * 0.06;
                             let xPos = xBase + (a * espacamentoBolha);
 
-                            // Tamanho dinâmico do bloco de leitura baseado no tamanho total da caixa
-                            let sampleSize = Math.floor(W * 0.025);
-                            let xTopLeft = Math.max(0, xPos - sampleSize);
-                            let yTopLeft = Math.max(0, yPos - sampleSize);
+                            let sampleSize = Math.max(3, Math.floor(W * 0.02));
+                            let xTopLeft = Math.max(0, Math.floor(xPos - sampleSize));
+                            let yTopLeft = Math.max(0, Math.floor(yPos - sampleSize));
                             let sampleRect = new cv.Rect(xTopLeft, yTopLeft, sampleSize * 2, sampleSize * 2);
                             
                             let regiao = thresh.roi(sampleRect);
@@ -446,7 +569,6 @@
                     }
                 }
 
-                // Limpeza da memória
                 src.delete(); gray.delete(); blurred.delete(); edges.delete();
                 contours.delete(); hierarchy.delete(); roi.delete(); thresh.delete();
 
@@ -454,7 +576,7 @@
 
             } catch (e) {
                 console.error(e);
-                statusEl.innerText = "Erro: " + e.message + " Aproxime o celular e tente novamente.";
+                statusEl.innerText = "Erro ao ler as marcações. Tente escanear novamente com mais luz.";
             }
         }
 
@@ -479,7 +601,7 @@
             });
 
             document.getElementById('painelConferencia').style.display = "block";
-            document.getElementById('status').innerText = "✨ Leitura do quadro concluída! Confira abaixo.";
+            document.getElementById('status').innerText = "✨ Escaneamento concluído com sucesso!";
         }
 
         function salvarAjustesEEnviar() {
@@ -528,6 +650,7 @@
         }
 
         function reiniciarSistema() {
+            monitorAoVivoAtivo = false;
             document.getElementById('selectDisciplina').value = "";
             document.getElementById('selectSerie').innerHTML = '<option value="">Selecione a disciplina primeiro...</option>';
             document.getElementById('selectSerie').disabled = true;
